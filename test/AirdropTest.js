@@ -24,6 +24,10 @@ describe("空投合约测试", function () {
   
   // 测试数据 - 空投名单
   const airdropList = [];
+  const tokenName = "空投代币";
+  const tokenSymbol = "ADT";
+  const initialSupply = ethers.parseUnits("1000000", 18);
+  const tokenCap = ethers.parseUnits("10000000", 18); // 1000万上限
   
   before(async function() {
     // 获取测试账号
@@ -58,9 +62,13 @@ describe("空投合约测试", function () {
   
   beforeEach(async function() {
     // 部署代币合约
-    const initialSupply = ethers.parseUnits("1000000", 18);
     const Token = await ethers.getContractFactory("AirdropToken");
-    token = await Token.deploy(initialSupply);
+    token = await Token.deploy(
+      tokenName,
+      tokenSymbol,
+      initialSupply,
+      tokenCap
+    );
     await token.waitForDeployment();
     
     // 部署分发合约
@@ -74,14 +82,78 @@ describe("空投合约测试", function () {
   });
   
   describe("AirdropToken", function() {
+    it("应该正确设置代币名称和符号", async function() {
+      expect(await token.name()).to.equal(tokenName);
+      expect(await token.symbol()).to.equal(tokenSymbol);
+    });
+    
     it("初始供应量应该正确", async function() {
       const totalSupply = await token.totalSupply();
-      expect(totalSupply).to.equal(ethers.parseUnits("1000000", 18));
+      expect(totalSupply).to.equal(initialSupply);
     });
     
     it("部署者应持有所有初始代币", async function() {
       const ownerBalance = await token.balanceOf(owner.address);
-      expect(ownerBalance).to.equal(ethers.parseUnits("999000", 18)); // 1000000 - 1000(转给distributor的)
+      const expectedBalance = initialSupply - ethers.parseUnits("1000", 18);
+      expect(ownerBalance).to.equal(expectedBalance); // 1000000 - 1000(转给distributor的)
+    });
+    
+    it("应该正确设置代币上限", async function() {
+      expect(await token.cap()).to.equal(tokenCap);
+    });
+    
+    it("部署者应该拥有MINTER_ROLE角色", async function() {
+      const MINTER_ROLE = await token.MINTER_ROLE();
+      expect(await token.hasRole(MINTER_ROLE, owner.address)).to.be.true;
+    });
+    
+    it("部署者应该拥有PAUSER_ROLE角色", async function() {
+      const PAUSER_ROLE = await token.PAUSER_ROLE();
+      expect(await token.hasRole(PAUSER_ROLE, owner.address)).to.be.true;
+    });
+    
+    it("应该能铸造新代币", async function() {
+      const mintAmount = ethers.parseUnits("10000", 18);
+      await token.mint(addr1.address, mintAmount);
+      
+      expect(await token.balanceOf(addr1.address)).to.equal(mintAmount);
+      const expectedSupply = BigInt(initialSupply) + BigInt(mintAmount);
+      expect(await token.totalSupply()).to.equal(expectedSupply);
+    });
+    
+    it("非MINTER_ROLE不能铸造代币", async function() {
+      const mintAmount = ethers.parseUnits("10000", 18);
+      
+      await expect(
+        token.connect(addr1).mint(addr1.address, mintAmount)
+      ).to.be.reverted; // 由于没有权限会被AccessControl拦截
+    });
+    
+    it("可以暂停和恢复代币转账", async function() {
+      // 暂停代币
+      await token.pause();
+      
+      // 尝试转账应该失败
+      const transferAmount = ethers.parseUnits("100", 18);
+      await expect(
+        token.transfer(addr1.address, transferAmount)
+      ).to.be.revertedWith("ERC20Pausable: token transfer while paused");
+      
+      // 恢复代币
+      await token.unpause();
+      
+      // 现在应该可以转账
+      await token.transfer(addr1.address, transferAmount);
+      expect(await token.balanceOf(addr1.address)).to.equal(transferAmount);
+    });
+    
+    it("铸造不能超过代币上限", async function() {
+      // 尝试铸造超过上限的代币
+      const overCapAmount = BigInt(tokenCap) - BigInt(initialSupply) + 1n; // 超过上限1个单位
+      
+      await expect(
+        token.mint(addr1.address, overCapAmount)
+      ).to.be.revertedWith("ERC20Capped: cap exceeded");
     });
   });
   
@@ -161,6 +233,37 @@ describe("空投合约测试", function () {
           wrongProof
         )
       ).to.be.revertedWith("MerkleDistributor: Invalid proof");
+    });
+    
+    it("代币暂停后不能领取空投", async function() {
+      const airdropForAddr1 = airdropList[0];
+      const proof = merkleTree.getHexProof(
+        hashToken(airdropForAddr1.index, airdropForAddr1.account, airdropForAddr1.amount)
+      );
+      
+      // 暂停代币
+      await token.pause();
+      
+      // 尝试领取空投应该失败
+      await expect(
+        distributor.connect(addr1).claim(
+          airdropForAddr1.index,
+          airdropForAddr1.account, 
+          airdropForAddr1.amount, 
+          proof
+        )
+      ).to.be.revertedWith("ERC20Pausable: token transfer while paused");
+      
+      // 恢复代币
+      await token.unpause();
+      
+      // 现在应该可以领取
+      await distributor.connect(addr1).claim(
+        airdropForAddr1.index,
+        airdropForAddr1.account, 
+        airdropForAddr1.amount, 
+        proof
+      );
     });
   });
 }); 
