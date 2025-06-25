@@ -1,12 +1,17 @@
 {
   "name": "contract-airdrop",
   "version": "1.0.0",
-  "description": "",
+  "description": "智能合约空投系统，使用Merkle树验证",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "hardhat test",
+    "compile": "hardhat compile",
+    "deploy:token": "hardhat run scripts/deploy_token.js",
+    "deploy:distributor": "hardhat run scripts/deploy.js",
+    "node": "hardhat node",
+    "test:gas": "REPORT_GAS=true hardhat test"
   },
-  "keywords": [],
+  "keywords": ["ethereum", "solidity", "airdrop", "merkle-tree"],
   "author": "",
   "license": "ISC",
   "dependencies": {
