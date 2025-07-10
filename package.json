@@ -12,7 +12,8 @@
     "test:gas": "REPORT_GAS=true hardhat test",
     "generate-merkle-tree": "node scripts/generate_merkle_tree.js",
     "generate-merkle-proof": "node scripts/generate_merkle_proof.js",
-    "fetch-defi": "node scripts/fetch_defi_positions.js"
+    "fetch-defi": "node scripts/fetch_defi_positions.js",
+    "process-users": "node scripts/process_user_scores.js"
   },
   "keywords": ["ethereum", "solidity", "airdrop", "merkle-tree"],
   "author": "",
