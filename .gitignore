@@ -18,5 +18,6 @@ ignition/deployments/chain-31337
 
 csv/
 csv-test/
+csv-merged/
 merkle-data/
 defi-positions/
