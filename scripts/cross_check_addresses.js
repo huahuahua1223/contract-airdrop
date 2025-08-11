@@ -7,9 +7,10 @@ const readline = require('readline');
 const { performance } = require('perf_hooks');
 
 /**
- * 交叉对比csv-merged目录中的1-9.csv文件与170w个孤岛地址快照.csv文件
- * 从1.csv到9.csv中去除那些在170w个孤岛地址快照.csv中存在的地址
- * 输出清理后的CSV文件（只保留不在快照中的地址）
+ * 交叉对比csv-merged目录中的1-9.csv文件与两个过滤条件：
+ * 1. 排除170w个孤岛地址快照.csv中存在的地址
+ * 2. 排除100w个连续周低gas地址快照.csv中weeks_with_low_gas_behavior>=2的地址
+ * 输出清理后的CSV文件（只保留符合条件的地址）
  */
 
 // 配置参数
@@ -17,7 +18,9 @@ const CONFIG = {
   // 批处理大小，避免内存占用过大
   BATCH_SIZE: 10000,
   // 进度报告间隔
-  PROGRESS_INTERVAL: 50000
+  PROGRESS_INTERVAL: 50000,
+  // 低gas行为周数阈值
+  LOW_GAS_WEEKS_THRESHOLD: 2
 };
 
 /**
@@ -88,12 +91,97 @@ async function loadSnapshotAddresses(snapshotPath) {
 }
 
 /**
+ * 读取100w个连续周低gas地址快照.csv文件，构建周数大于等于阈值的地址集合
+ * @param {string} lowGasPath 低gas地址快照文件路径
+ * @returns {Promise<Set>} 应该被过滤的地址集合
+ */
+async function loadLowGasAddresses(lowGasPath) {
+  console.log(`正在读取低gas地址快照文件: ${lowGasPath}`);
+  const startTime = performance.now();
+  
+  const filterAddresses = new Set();
+  
+  try {
+    if (!fs.existsSync(lowGasPath)) {
+      console.error(`错误: 低gas地址快照文件 ${lowGasPath} 不存在`);
+      return filterAddresses;
+    }
+    
+    const fileStream = fs.createReadStream(lowGasPath);
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity
+    });
+    
+    let isFirstLine = true;
+    let headers = [];
+    let weeksColumnIndex = -1;
+    let addressColumnIndex = 0;
+    let lineCount = 0;
+    
+    for await (const line of rl) {
+      // 处理CSV头行
+      if (isFirstLine) {
+        isFirstLine = false;
+        headers = line.split(',').map(h => h.trim());
+        
+        // 查找 weeks_with_low_gas_behavior 列的索引
+        weeksColumnIndex = headers.findIndex(h => h === 'weeks_with_low_gas_behavior');
+        
+        if (weeksColumnIndex === -1) {
+          console.error(`错误: 在低gas地址快照文件中找不到 'weeks_with_low_gas_behavior' 列`);
+          return filterAddresses;
+        }
+        
+        continue;
+      }
+      
+      // 跳过空行
+      if (!line.trim()) continue;
+      
+      lineCount++;
+      
+      // 解析行数据
+      const columns = line.split(',').map(c => c.trim());
+      
+      // 检查有效性
+      if (columns.length > Math.max(addressColumnIndex, weeksColumnIndex)) {
+        const address = columns[addressColumnIndex].toLowerCase();
+        const weeksWithLowGas = parseInt(columns[weeksColumnIndex], 10);
+        
+        // 检查地址格式及周数条件
+        if (address.startsWith('0x') && address.length === 42 && 
+            !isNaN(weeksWithLowGas) && weeksWithLowGas >= CONFIG.LOW_GAS_WEEKS_THRESHOLD) {
+          filterAddresses.add(address);
+        }
+      }
+      
+      // 每处理一定数量行报告进度
+      if (lineCount % CONFIG.PROGRESS_INTERVAL === 0) {
+        console.log(`已读取 ${lineCount} 行，当前符合过滤条件的地址数: ${filterAddresses.size}`);
+      }
+    }
+    
+    const elapsedTime = ((performance.now() - startTime) / 1000).toFixed(2);
+    console.log(`✓ 低gas地址快照文件读取完成，共 ${lineCount} 行`);
+    console.log(`✓ 找到 ${filterAddresses.size} 个 weeks_with_low_gas_behavior >= ${CONFIG.LOW_GAS_WEEKS_THRESHOLD} 的地址`);
+    console.log(`✓ 耗时: ${elapsedTime}秒`);
+    
+    return filterAddresses;
+  } catch (error) {
+    console.error(`读取低gas地址快照文件时出错:`, error);
+    return filterAddresses;
+  }
+}
+
+/**
  * 处理单个CSV文件，去除匹配的地址
  * @param {string} csvPath CSV文件路径
- * @param {Set} snapshotAddresses 快照地址集合
+ * @param {Set} snapshotAddresses 孤岛地址快照集合
+ * @param {Set} lowGasAddresses 低gas行为地址集合
  * @returns {Promise<Object>} 处理结果
  */
-async function processCsvFile(csvPath, snapshotAddresses) {
+async function processCsvFile(csvPath, snapshotAddresses, lowGasAddresses) {
   const fileName = path.basename(csvPath);
   console.log(`\n处理文件: ${fileName}`);
   const startTime = performance.now();
@@ -145,13 +233,14 @@ async function processCsvFile(csvPath, snapshotAddresses) {
       if (columns.length > 1) {
         const address = columns[1].trim().toLowerCase();
         
-        // 检查地址是否在快照中
-        if (address.startsWith('0x') && address.length === 42 && snapshotAddresses.has(address)) {
-          // 如果地址在快照中，则排除这条记录
+        // 检查地址是否在快照中或低gas行为地址集合中
+        if (address.startsWith('0x') && address.length === 42 && 
+            (snapshotAddresses.has(address) || lowGasAddresses.has(address))) {
+          // 如果地址在任一排除集合中，则排除这条记录
           results.excludedRecords++;
           results.excludedAddresses.push(address);
         } else {
-          // 如果地址不在快照中，则保留这条记录
+          // 如果地址不在任一排除集合中，则保留这条记录
           results.keptRecords++;
           
           // 构建保留记录的数据对象
@@ -230,7 +319,9 @@ function generateCleanupReport(allResults, outputDir) {
 ==========================================
 生成时间: ${new Date().toLocaleString()}
 处理目标: csv-merged目录中的1-9.csv文件
-清理标准: 排除170w个孤岛地址快照.csv中存在的地址
+清理标准: 
+1. 排除170w个孤岛地址快照.csv中存在的地址
+2. 排除100w个连续周低gas地址快照.csv中weeks_with_low_gas_behavior >= ${CONFIG.LOW_GAS_WEEKS_THRESHOLD}的地址
 
 详细结果:
 `;
@@ -324,6 +415,7 @@ async function cleanAddresses() {
     // 定义路径
     const csvMergedDir = path.join(__dirname, '../csv-merged');
     const snapshotPath = path.join(csvMergedDir, '170w个孤岛地址快照.csv');
+    const lowGasPath = path.join(csvMergedDir, '100w个连续周低gas地址快照.csv');
     const outputDir = path.join(__dirname, '../cleaned-results');
     
     // 确保输出目录存在
@@ -331,15 +423,22 @@ async function cleanAddresses() {
       fs.mkdirSync(outputDir, { recursive: true });
     }
     
-    // 步骤1: 读取快照文件地址
+    // 步骤1: 读取孤岛地址快照文件
     const snapshotAddresses = await loadSnapshotAddresses(snapshotPath);
     
     if (snapshotAddresses.size === 0) {
-      console.error('错误: 未能读取到有效的快照地址，程序退出');
+      console.error('错误: 未能读取到有效的孤岛地址快照，程序退出');
       return;
     }
     
-    // 步骤2: 获取要处理的CSV文件列表（1.csv到9.csv）
+    // 步骤2: 读取低gas地址快照文件
+    const lowGasAddresses = await loadLowGasAddresses(lowGasPath);
+    
+    if (lowGasAddresses.size === 0) {
+      console.warn('警告: 未能读取到有效的低gas地址快照数据，将只进行孤岛地址的过滤');
+    }
+    
+    // 步骤3: 获取要处理的CSV文件列表（1.csv到9.csv）
     const csvFiles = [];
     for (let i = 1; i <= 9; i++) {
       const csvFile = path.join(csvMergedDir, `${i}.csv`);
@@ -356,8 +455,9 @@ async function cleanAddresses() {
     }
     
     console.log(`\n找到 ${csvFiles.length} 个CSV文件需要处理`);
-    console.log(`快照地址数: ${snapshotAddresses.size}`);
-    console.log(`处理策略: 排除快照中存在的地址，保留其他地址`);
+    console.log(`孤岛地址快照数: ${snapshotAddresses.size}`);
+    console.log(`低gas地址过滤数: ${lowGasAddresses.size}`);
+    console.log(`处理策略: 排除孤岛地址快照中存在的地址，以及连续周低gas行为大于等于${CONFIG.LOW_GAS_WEEKS_THRESHOLD}的地址`);
     
     // 启用内存使用量监控
     const memoryInterval = setInterval(logMemoryUsage, 60000); // 每60秒输出一次内存使用情况
@@ -371,7 +471,7 @@ async function cleanAddresses() {
       console.log(`\n[${i + 1}/${csvFiles.length}] 开始处理文件: ${fileName}.csv`);
       
       // 处理文件
-      const result = await processCsvFile(csvFile, snapshotAddresses);
+      const result = await processCsvFile(csvFile, snapshotAddresses, lowGasAddresses);
       allResults.push(result);
       
       // 保存清理后的数据到单独的文件
@@ -435,8 +535,10 @@ async function main() {
   node cross_check_addresses.js
 
 功能:
-  从csv-merged目录中的1-9.csv文件中去除170w个孤岛地址快照.csv中存在的地址
-  输出清理后的CSV文件（只保留不在快照中的地址）
+  从csv-merged目录中的1-9.csv文件中执行双重过滤：
+  1. 排除170w个孤岛地址快照.csv中存在的地址
+  2. 排除100w个连续周低gas地址快照.csv中weeks_with_low_gas_behavior >= 2的地址
+  输出清理后的CSV文件（只保留符合条件的地址）
 
 输出:
   - cleaned-results目录下的cleaned_[文件名].csv文件（包含清理后的记录）
@@ -464,6 +566,7 @@ if (require.main === module) {
 module.exports = {
   cleanAddresses,
   loadSnapshotAddresses,
+  loadLowGasAddresses,
   processCsvFile,
   generateCleanupReport
 };
