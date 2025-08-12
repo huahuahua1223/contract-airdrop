@@ -11,11 +11,11 @@ const OUTPUT_FILE = path.join(__dirname, '../csv/user_scores.csv');
 
 // 积分计算规则
 const SCORE_RULES = [
-  { threshold: 1000000, score: 12, label: '巨鲸' },
-  { threshold: 100000, score: 6, label: '大户' },
-  { threshold: 1000, score: 3, label: '中户' },
-  { threshold: 100, score: 2, label: '小户' },
-  { threshold: 20, score: 1, label: '极小户' }
+  { threshold: 1000000, score: 12, label: 'Whale' },
+  { threshold: 100000, score: 6, label: 'Large Holder' },
+  { threshold: 1000, score: 3, label: 'Medium Holder' },
+  { threshold: 100, score: 2, label: 'Small Holder' },
+  { threshold: 20, score: 1, label: 'Tiny Holder' }
 ];
 
 /**
@@ -32,7 +32,7 @@ function calculateScore(totalValue) {
       };
     }
   }
-  return { score: 0, label: '未达标' };
+  return { score: 0, label: 'Below Threshold' };
 }
 
 /**
@@ -73,7 +73,7 @@ async function processDefiPositionsFile(filePath) {
         const { score, label } = calculateScore(totalValue);
         
         // 如果是巨鲸，记录数量
-        if (label === '巨鲸') {
+        if (label === 'Whale') {
           results.whales++;
         }
         
@@ -203,11 +203,11 @@ async function processUserData() {
     fs.writeFileSync(OUTPUT_FILE, csv);
     
     // 统计数据
-    const whaleCount = sortedUserData.filter(user => user.user_label === '巨鲸').length;
-    const largeHolderCount = sortedUserData.filter(user => user.user_label === '大户').length;
-    const mediumHolderCount = sortedUserData.filter(user => user.user_label === '中户').length;
-    const smallHolderCount = sortedUserData.filter(user => user.user_label === '小户').length;
-    const tinyHolderCount = sortedUserData.filter(user => user.user_label === '极小户').length;
+    const whaleCount = sortedUserData.filter(user => user.user_label === 'Whale').length;
+    const largeHolderCount = sortedUserData.filter(user => user.user_label === 'Large Holder').length;
+    const mediumHolderCount = sortedUserData.filter(user => user.user_label === 'Medium Holder').length;
+    const smallHolderCount = sortedUserData.filter(user => user.user_label === 'Small Holder').length;
+    const tinyHolderCount = sortedUserData.filter(user => user.user_label === 'Tiny Holder').length;
     
     // 输出总结果
     console.log('\n==========================================');
