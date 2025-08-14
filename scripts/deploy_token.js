@@ -1,10 +1,10 @@
 const { ethers } = require("hardhat");
 
 async function main() {
-  const tokenName = "空投代币";
-  const tokenSymbol = "ADT";
-  const initialSupply = ethers.parseUnits("1000000", 18); // 100万 ADT
-  const tokenCap = ethers.parseUnits("10000000", 18);    // 1000万上限
+  const tokenName = "UnichatV4.com";
+  const tokenSymbol = "UnichatV4.com";
+  const initialSupply = ethers.parseUnits("1000000", 18); // 100万 UnichatV4.com
+  const tokenCap = ethers.parseUnits("21000000", 18);    // 2100万上限
   
   const Token = await ethers.getContractFactory("AirdropToken");
   const token = await Token.deploy(tokenName, tokenSymbol, initialSupply, tokenCap);

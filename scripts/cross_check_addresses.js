@@ -20,7 +20,7 @@ const CONFIG = {
   // 进度报告间隔
   PROGRESS_INTERVAL: 50000,
   // 低gas行为周数阈值
-  LOW_GAS_WEEKS_THRESHOLD: 2
+  LOW_GAS_WEEKS_THRESHOLD: 20
 };
 
 /**

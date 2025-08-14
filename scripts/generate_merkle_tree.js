@@ -251,7 +251,7 @@ async function buildMerkleTree(batchSize = 100) {
 
   // 用户CSV模式：读取/csv目录下的所有CSV文件
   console.log('读取/csv目录下的所有CSV文件...');
-  const csvDir = path.join(__dirname, '../csv');
+  const csvDir = path.join(__dirname, '../cleaned-results');
   const csvFiles = getAllCsvFiles(csvDir);
   
   if (csvFiles.length === 0) {

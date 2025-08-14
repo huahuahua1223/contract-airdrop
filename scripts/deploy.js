@@ -15,12 +15,12 @@ async function main() {
   console.log("Distributor 已部署:", await dist.getAddress());
 
   // 获取 ERC20 合约实例
-  const IERC20 = await ethers.getContractFactory("@openzeppelin/contracts/token/ERC20/IERC20.sol:IERC20");
-  const token = await IERC20.attach(tokenAddr);
+  const AirdropToken = await ethers.getContractFactory("AirdropToken");
+  const airdropToken = await AirdropToken.attach(tokenAddr);
 
   // 计算需转账总量（按 proof JSON 中的总量）
-  const total = await token.balanceOf(deployer.address);
-  console.log("部署者 token 余额:", total.toString());
+  const total = await airdropToken.balanceOf(deployer.address);
+  console.log("部署者 airdropToken 余额:", total.toString());
 
   // 你可替换为你预先计算的总分配量, 如：
   // const amount = ethers.parseUnits("1000000", 18);
@@ -29,12 +29,12 @@ async function main() {
 
   // 批准 Distributor 合约转账权限
   const distributorAddress = await dist.getAddress();
-  const allowanceTx = await token.approve(distributorAddress, amount);
+  const allowanceTx = await airdropToken.approve(distributorAddress, amount);
   await allowanceTx.wait();
   console.log(`Approved ${amount} tokens to distributor`);
 
   // 将 token 转入 Distributor
-  const fundTx = await token.transfer(distributorAddress, amount);
+  const fundTx = await airdropToken.transfer(distributorAddress, amount);
   await fundTx.wait();
   console.log(`Transferred ${amount} tokens to distributor`);
 
