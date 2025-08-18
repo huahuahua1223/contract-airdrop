@@ -358,33 +358,7 @@ function writeResultsToCSV(results, outputPath, stats) {
       'individual_values'        // 各个价值详情
     ];
     
-    // 生成文件头部注释的函数
-    const createHeader = (fileIndex, recordsInFile, startIndex, endIndex) => {
-      let header = `# 代币持有者聚合数据`;
-      if (totalFiles > 1) {
-        header += ` - 第${fileIndex}部分`;
-      }
-      header += `\n`;
-      header += `# 生成时间: ${new Date().toISOString()}\n`;
-      if (totalFiles > 1) {
-        header += `# 总记录数: ${results.length.toLocaleString()}\n`;
-        header += `# 本文件记录数: ${recordsInFile.toLocaleString()}\n`;
-        header += `# 记录范围: ${(startIndex + 1).toLocaleString()} - ${endIndex.toLocaleString()}\n`;
-      } else {
-        header += `# 记录数: ${results.length.toLocaleString()}\n`;
-      }
-      header += `# 唯一地址数: ${stats.uniqueAddresses.toLocaleString()}\n`;
-      header += `# 代币合约数: ${stats.totalTokens}\n`;
-      header += `# 平均积分: ${stats.averageScore}\n`;
-      header += `# 积分范围: ${stats.minScore} - ${stats.maxScore}\n`;
-      header += `#\n`;
-      header += `# 说明:\n`;
-      header += `# - 已排除Exchange/Fees/Multisig/Safe/Pool/LP/Bridge/Relayer/Executor/Deployer/Exploiter/Donate/Fake_Phishing/dEaD等标签的地址\n`;
-      header += `# - 每个地址最多聚合前4个最高积分\n`;
-      header += `# - token_symbols和source_files用分号(;)分隔多个值\n`;
-      header += `#\n\n`;
-      return header;
-    };
+    // 移除文件头部注释，直接使用CSV标题
     
     const outputFileList = [];
     
@@ -408,11 +382,7 @@ function writeResultsToCSV(results, outputPath, stats) {
       // 创建写入流
       const writeStream = fs.createWriteStream(splitFilePath);
       
-      // 写入文件头部注释
-      const headerContent = createHeader(fileIndex, recordsInFile, startIndex, endIndex);
-      writeStream.write(headerContent);
-      
-      // 写入CSV标题行
+      // 直接写入CSV标题行（第一行）
       writeStream.write(headers.join(',') + '\n');
       
       // 获取当前文件的数据片段
